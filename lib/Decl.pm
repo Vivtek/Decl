@@ -10,11 +10,11 @@ Decl - The great new Decl!
 
 =head1 VERSION
 
-Version 0.01
+Version 0.20
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.20';
 
 
 =head1 SYNOPSIS
@@ -97,7 +97,7 @@ L<http://search.cpan.org/dist/Decl/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2012 Michael Roberts.
+Copyright 2015 Michael Roberts.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
