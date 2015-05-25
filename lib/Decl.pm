@@ -3,10 +3,12 @@ package Decl;
 use 5.006;
 use strict;
 use warnings;
+use DBI;
+use Decl::Node;
 
 =head1 NAME
 
-Decl - The great new Decl!
+Decl - a declarative programming language
 
 =head1 VERSION
 
@@ -19,34 +21,81 @@ our $VERSION = '0.20';
 
 =head1 SYNOPSIS
 
-Quick summary of what the module does.
+Decl is a declarative programming language that focuses on the definition of structures instead of the specification of actions.
+Its main distinguishing features are a rich syntax, document orientation instead of stream orientation, literate programming
+techniques baked in from the start, programming language agnosticism, and a semantic approach instead of a syntactic approach.
 
-Perhaps a little code snippet.
+It's still 90% handwaving, but that's an improvement over the 99% it's been in the past.
 
-    use Decl;
+The base Decl object constitutes an instance. An instance has a docset (the set of source documents that define it), a lexicon
+(the set of vocabularies that convert its syntax-level objects into semantic structure), a semantic machine (the interface
+between the instance and the system it is controlling or with which it interacts), and an optional persistence mechanism
+that allows its state to be preserved.
 
-    my $foo = Decl->new();
-    ...
+=head1 METHODS
 
-=head1 EXPORT
+=head2 new
 
-A list of functions that can be exported.  You can delete this section
-if you don't export anything, such as for a purely object-oriented module.
-
-=head1 SUBROUTINES/METHODS
-
-=head2 function1
+This creates a new Decl instance. Right now, this simply takes the docset we'll be working from, plus a specification for
+the persistence database (if any). Later I'll pull the persistence structure out into another set of classes, but I have
+places to go this weekend.
 
 =cut
 
-sub function1 {
+sub new {
+	my $class = shift;
+	my $self = bless {}, $class;
+    my $p = {@_};
+    if ($p->{dbh}) {
+    	$self->{dbh} = $p->{dbh};
+    } elsif ($p->{dbfile}) {
+        $self->{dbh} = DBI->connect('dbi:SQLite:dbname=' . $p->{dbfile});
+    } else {
+        $self->{dbh} = DBI->connect('dbi:SQLite:dbname=decl.sqld');
+    }
+    if ($p->{docset}) {
+    	$self->{docset} = $p->{docset};
+    	# Todo: some kind of simplifying default behavior.
+    }
+    return $self;
 }
 
-=head2 function2
+=head2 load
+
+Loads all the code from the docset into the workspace.
 
 =cut
 
-sub function2 {
+sub load {
+	my $self = shift;
+	my $iter = $self->{docset}->list;
+	$self->{ws} = {};
+	my $indexer = sub {
+		my ($docid, $tag, $name, $level, $path, $node) = @_;
+		return unless $level == 1; # Top-level only (for now)
+		push @{$self->{ws}->{$tag}->{list}}, [$name, $docid, $node];
+		$self->{ws}->{$tag}->{names}->{$name} = $node;
+	};
+
+	while (my $next = $iter->()) {
+		last if not defined $next; # Little paranoia here...
+		my $i = $self->{docset}->info($next);
+		my $content = $self->{docset}->text($next);
+		my $d = Decl::Node->new($content, undef, {type=>$i->{type}, indexer=>$indexer, docid=>$next});
+	}
+}
+
+=head2 extract (tag, coderef)
+
+Walks through a loaded workspace looking for all instances of a specific tag. When one is found,
+the coderef is called on it and the list of the returns of all the calls is returned from this method.
+
+=cut
+
+sub extract {
+	my ($self, $tag, $coderef) = @_;
+
+	map {$coderef->($_->[2])} @{$self->{ws}->{$tag}->{list}};
 }
 
 =head1 AUTHOR

@@ -1,5 +1,5 @@
 {
-   "abstract" : "The great new Decl!",
+   "abstract" : "a declarative programming language",
    "author" : [
       "Michael Roberts <michael@vivtek.com>"
    ],
@@ -38,5 +38,5 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.01"
+   "version" : "0.20"
 }

@@ -209,7 +209,7 @@ is_deeply (\@tags, ['text', 'code', 'text', '', 'tag']);
 my @test = map { $_->hastext} $d->children;
 is_deeply (\@test, [1, 0, 1, 1, 0]);
 @test = map { $_->hascode} $d->children;
-is_deeply (\@test, [0, 1, 0, 0, 0]);
+is_deeply (\@test, ['', '{', '', '', '']);
 @test = map { $_->haschildren} $d->children;
 is_deeply (\@test, [0, 1, 1, 0, 0]);
 
@@ -219,6 +219,7 @@ ok (not $text->getcode);
 my $code = $d->{children}->[1];
 ok (not $code->gettext);
 ok ($code->getcode eq "# There could be code here.");
+ok ($code->hascode eq '{');
 my $addendum = $code->{children}->[0];
 ok ($addendum->{tag} eq 'addendum');
 ok ($addendum->hastext);
@@ -247,7 +248,6 @@ ok ($c->hastext);
 ok ($c->gettext, "This is just\nsome OOB commentary text");
 #diag $d->dump_tree;
 
-BIG_SKIP:
 
 $decl1 = <<'EOF';
 This is a sample of a text-plus mode Decl input.
@@ -282,5 +282,43 @@ ok ($d->getparm('ysize') == 110);
 @c = $d->children;
 ok (scalar @c == 2);
 ok ($d->{children}->[1]->tag eq 'field');
+
+$decl1 = <<'EOF';
+tag blah blah
+   <insertion point>
+
+<insertion point>: Text here.
+
+EOF
+$d = Decl::Syntax->load(\$decl1, 'tag');
+isa_ok ($d, 'Decl::Syntax');
+$c = $d->{children}->[1];
+ok ($c->tag eq '<insertion point>');
+ok ($c->hastext);
+ok ($c->gettext eq "Text here.");
+
+
+BIG_SKIP:
+
+$decl1 = <<'EOF';
+code <angle code>
+code <
+   more angle code
+>
+code {curly code}
+code {
+	more curly code
+}
+code (
+	lispy code
+)
+code [
+	brackety code
+]
+EOF
+
+$d = Decl::Syntax->load(\$decl1, 'tag');
+@test = map {$_->hascode} $d->children;
+is_deeply (\@test, ['<', '<', '{', '{', '(', '[']);
 
 done_testing();

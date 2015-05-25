@@ -1,9 +1,15 @@
 Changes
 lib/Decl.pm
+lib/Decl/Syntax.pm
+lib/Decl/Node.pm
+lib/Decl/Docset.pm
+lib/Decl/Docset/Files.pm
+lib/Decl/Docset/DBI.pm
 Makefile.PL
 MANIFEST			This list of files
 README
 t/00-load.t
+t/01-nodes.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

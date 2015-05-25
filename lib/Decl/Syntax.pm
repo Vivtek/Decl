@@ -87,9 +87,9 @@ sub load {
         return $class->load({type=>'file', file=>$source}, $mode);
     } elsif (ref $source eq 'SCALAR') {
         return $class->load({type=>'string', string=>$$source}, $mode);
+    } elsif (ref $source ne 'HASH') {
+        return $class->load({type=>'iter', iter=>$source}, $mode);
     }
-    
-    croak "Need a hash for now" if ref $source ne 'HASH';
     
     my $self;
     my $input;
@@ -118,6 +118,17 @@ sub load {
             post_indent=>0,
         });
         $self->_load ($source->{string});
+    } elsif ($source->{type} eq 'iter') {
+        $self = $class->new({
+            what=>'source',
+            type=>'iterator',
+            mode=>$mode,
+            current_input=>$self,
+            blank_lines=>0,
+            indent=>-1,
+            post_indent=>0,
+        });
+        $self->_load ($source->{iter});
     } else {
         croak "I don't know how to load a " . $source->{type};
     }
@@ -130,7 +141,7 @@ sub mode { $_[0]->{mode} || $_[0]->{what} || 'tag' }
 sub _load {
     my $self = shift;
     my $input;
-    if (@_ > 1 or not Iterator::Simple::is_iterator($_[0])) {
+    if (@_ > 1 or $self->{type} eq 'iterator' or not Iterator::Simple::is_iterator($_[0])) {
         $input = Text::Tokenize::Indented->tokenize(@_);
     } else {
         $input = shift;
@@ -202,6 +213,15 @@ sub find_initial {
             $rest = $2;
         }
         return ($initial, $post_indent, $rest);
+    } elsif ($text =~ /^(<[^>]*>)(\s*)([\s:{\[<\(].*)$/) {
+        $initial = $1;
+        $post_indent = length($2) + length($initial);
+        $rest = $3;
+        if ($rest =~ /^(\s+)(.*)$/) {
+            $post_indent += length($1);
+            $rest = $2;
+        }
+        return ($initial, $post_indent, $rest);
     } elsif ($text =~ /^([^\s:{\[<\(]+)(\s*)$/) {
         # Tag on a line alone
         return ($text, 0, '');
@@ -225,6 +245,7 @@ sub tag_starter {
     # length of the token content, 'x' is the one-character type (empty for a bareword), and the 'string'
     # is the token content itself, still unprocessed.
     my @tokens = toktag ($self->{line});
+    #print STDERR Dumper (@tokens);
     
     # In the second pass, each type of token can have its own post-processing done, again in priority order.
     # 1. '#', code sigils, and text remainders (anything that does 'rest of the line') have quoted content restored.
@@ -243,8 +264,18 @@ sub tag_starter {
     # handler to set the bodymode for the tag's content (if any).
     $self->{bodymode} = 'tag'; # Default.
     $self->{hastext} = 0;
-    $self->{hascode} = 0;
+    $self->{hascode} = '';
     $self->{post_sigil} = 0;
+
+    my $linecode = $self->linecode;
+    if ($linecode) {
+        my $type = $self->linecodetype;
+        $type =~ tr/>}\)\]/<{\(\[/;
+        $self->{hascode} = $type;
+        $self->{code} = [$linecode];
+        return;
+    }
+
     return unless $self->{handler};
     return unless $self->{handler}->{mbody};
     my $mbody = $self->{handler}->{mbody};
@@ -253,6 +284,8 @@ sub tag_starter {
         $self->{mterm} = $self->{handler}->{mterm}->{$sigil};
     }
     my $map = $mbody->{$sigil};
+    #print STDERR "sigil is $sigil, map is $map\n";
+    #print STDERR Dumper($self->{parmtoks});
     if (defined $map) {
         $self->{sigil} = $sigil;
         $self->{bodymode} = $map;
@@ -288,7 +321,7 @@ sub _handle_postsigil {  # Deal with text appearing on the line after the sigil,
     $self->{lines} = [$p->[0]];
     $self->{bodyindent} = 0;
     if ($self->{bodymode} eq 'code') {
-        $self->{hascode} = 1;
+        $self->{hascode} = $self->linecodetype;
     } else {
         $self->{hastext} = 1;
     }
@@ -481,7 +514,8 @@ sub toktag {
     $indent = 0;
     foreach my $t (@line) {
         my $first = substr($t,0,1);
-        if ($first eq '(' or $first eq "[") {
+        my $last = substr($t,-1,1);
+        if (($first eq '(' and $last eq ')') or ($first eq '[' and $last eq ']')) {
             push @toks, [$indent, length($t)-2, $first eq '(' ? ')' : ']', substr($t, 1, -1)];
             $text .= ' ' x length($t);
             $indent += length($t);
@@ -518,7 +552,7 @@ sub toktag {
 
 sub normal_indent_handler {
     my ($self, $indent, $text) = @_;
-    return 1 if $self->{mterm} and $indent == $self->{indent} and $text =~ /^$self->{mterm}/;
+    return 1 if $self->{mterm} and $indent == $self->{indent} and substr ($text,0,1) eq $self->{mterm};
     $indent > $self->{indent};
 }
 
@@ -645,13 +679,13 @@ sub code_line_handler {
         $blanks--;
     }
     $indent -= $self->{indent} + $self->{bodyindent};
-    if ($indent < 0 and $self->{mterm} and $text =~ /^$self->{mterm}/) {
+    if ($indent < 0 and $self->{mterm} and substr($text,0,1) eq $self->{mterm}) {
         $self->{codeterm} = $text;
         $self->{bodymode} = 'tag';
     } else {
         $indent = 0 if $indent < 0;
         push @{$self->{lines}}, ' ' x $indent . $text;
-        $self->{hascode} = 1;
+        $self->{hascode} = $self->sigil unless $self->{hascode};
     }
 }
 
